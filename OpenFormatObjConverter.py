@@ -426,37 +426,22 @@ def parse_odr(lines):
 
     return odr_data
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Invalid arguments")
-        exit(0)
+def split_odd_file_into_drawables(odd_file_content):
+    regex_drawable = r"(gtaDrawable) (\w+)\s*{\s*(.*?)(?=gtaDrawable|\Z)"
+    drawables = re.findall(regex_drawable, odd_file_content, re.DOTALL)
+    return drawables
 
-    input_file_path = sys.argv[1]
-
-    if not input_file_path.lower().endswith(".odr"):
-        print("Input file must have a .odr extension")
-        exit(0)
-
-    # input_file_path = "input/barrierblocks/bm_barrier_blocks.odr"
-    # input_file_path = "input/manhat/06x_mh1/06x_mh1_high.mesh"
-    # input_file_path = "input/bagload/bm_air_bagload/bm_air_bagload_high.mesh"
-    # input_file_path = "input/plank/bm_plank01/bm_plank01_high.mesh"
-
-    with open(input_file_path) as f:
-        raw_odr_lines = f.read()
-    
-    odr_data = parse_odr(raw_odr_lines)
-
-    # print(odr_data)
-    # exit(0)
-    
+def process_odr_data(odr_data, input_file_path, drawable_name=None):
     os.chdir(os.path.dirname(input_file_path))
-
     input_name, ext = os.path.splitext(os.path.basename(input_file_path))
+    
+    output_name = drawable_name if drawable_name is not None else input_name
 
     for lodgroup in odr_data["lodgroup"]:
-        output_obj_name = input_name + "_" + lodgroup + ".obj"
-        output_mtl_name = input_name + "_" + lodgroup + ".mtl"
+        # output_obj_name = output_name + "_" + lodgroup + ".obj"
+        # output_mtl_name = output_name + "_" + lodgroup + ".mtl"
+        output_obj_name = output_name + ".obj" # Removed the lodgroup name from the output as I don't think it's useful
+        output_mtl_name = output_name + ".mtl" # Removed the lodgroup name from the output as I don't think it's useful
 
         material_parser = MaterialParser(odr_data["shaders"])
         mesh_parser = MeshParser(odr_data["lodgroup"][lodgroup], material_parser.generate())
@@ -476,3 +461,33 @@ if __name__ == "__main__":
         
         with open(output_mtl_name, "w") as f:
             f.write(model_data["mtl"])
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Invalid arguments")
+        exit(0)
+
+    input_file_path = sys.argv[1]
+    input_file_extension = os.path.splitext(input_file_path)[1].lower()
+
+    # Check if file is ODR or ODD
+    if input_file_extension not in [".odr", ".odd"]:
+        print("Input file must have a .odr or .odd extension")
+        exit(0)
+
+    with open(input_file_path) as f:
+        raw_file_lines = f.read()
+
+    if input_file_extension == ".odr":
+        # If it's an ODR, parse it as before
+        odr_data = parse_odr(raw_file_lines)
+        process_odr_data(odr_data, input_file_path)  # This encapsulates your existing processing code
+
+    elif input_file_extension == ".odd":
+        # If it's an ODD, split it into drawable groups and parse each as if it were an ODR
+        drawables = split_odd_file_into_drawables(raw_file_lines)
+        for drawable in drawables:
+            _, drawable_name, drawable_content = drawable
+            drawable_content = f"Version 110 12\n{drawable_content}"
+            odr_data = parse_odr(drawable_content)
+            process_odr_data(odr_data, f"{input_file_path}_{drawable_name}", drawable_name)
